@@ -1,0 +1,52 @@
+{
+    "user_profile": {
+        "name": "Usu\u00e1rio Teste",
+        "age": 65,
+        "conditions": [
+            "Hipertens\u00e3o"
+        ]
+    },
+    "heart_rate_history": [
+        {
+            "timestamp": 1762474301,
+            "bpm": 67
+        },
+        {
+            "timestamp": 1762474302,
+            "bpm": 76
+        },
+        {
+            "timestamp": 1762474303,
+            "bpm": 72
+        },
+        {
+            "timestamp": 1762474304,
+            "bpm": 66
+        },
+        {
+            "timestamp": 1762474305,
+            "bpm": 65
+        },
+        {
+            "timestamp": 1762474306,
+            "bpm": 66
+        },
+        {
+            "timestamp": 1762474307,
+            "bpm": 78
+        },
+        {
+            "timestamp": 1762474308,
+            "bpm": 69
+        },
+        {
+            "timestamp": 1762474309,
+            "bpm": 65
+        },
+        {
+            "timestamp": 1762474310,
+            "bpm": 76
+        }
+    ],
+    "max_entries": 200
+}
