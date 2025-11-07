@@ -4,14 +4,14 @@ import json
 import os
 import random
 import time
-from threading import Lock
+from threading import RLock
 
 # Nome do nosso arquivo de "banco de dados"
 DB_FILE = "mock_db.json"
 
 # Um Lock é essencial para prevenir que o sensor e o dashboard
 # tentem ler/escrever o arquivo AO MESMO TEMPO, o que corromperia o JSON.
-file_lock = Lock()
+file_lock = RLock()
 
 def initialize_db(max_entries=200):
     """
@@ -59,27 +59,46 @@ def read_data():
 
 def add_heart_rate_data(new_bpm):
     """
-    Adiciona um novo registro de BPM ao banco de dados.
-    Também remove o registro mais antigo se exceder max_entries.
+    Adiciona um novo registro de BPM ao banco de dados usando
+    um método de "escrita atômica" para evitar race conditions.
     """
     with file_lock:
+        # 1. Lê os dados atuais (a função read_data não muda)
         data = read_data()
         
         history = data.get("heart_rate_history", [])
         max_entries = data.get("max_entries", 200)
         
+        # 2. Prepara os novos dados em memória
         new_entry = {
             "timestamp": int(time.time()),
             "bpm": new_bpm
         }
         history.append(new_entry)
         
-        # Mantém a lista com um tamanho máximo (FIFO - First-In, First-Out)
-        # Isso evita que nosso JSON fique gigante.
         if len(history) > max_entries:
             history.pop(0) # Remove o registro mais antigo
             
         data["heart_rate_history"] = history
         
-        with open(DB_FILE, 'w') as f:
-            json.dump(data, f, indent=4)
+        # --- INÍCIO DA CORREÇÃO (ESCRITA ATÔMICA) ---
+        
+        # 3. Define um nome de arquivo temporário
+        temp_file = DB_FILE + ".tmp"
+        
+        try:
+            # 4. Escreve os dados completos no arquivo temporário
+            with open(temp_file, 'w') as f:
+                json.dump(data, f, indent=4)
+            
+            # 5. Renomeia (move) o arquivo temporário para o real.
+            # Esta operação é "atômica" e instantânea.
+            os.replace(temp_file, DB_FILE)
+            
+        except Exception as e:
+            print(f"ERRO: Falha na escrita atômica do DB: {e}")
+            # Se algo der errado, limpa o arquivo temporário
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+        
+        # --- FIM DA CORREÇÃO ---

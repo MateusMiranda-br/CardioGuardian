@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 import time
 from core.db_mock import read_data
+from streamlit_autorefresh import st_autorefresh # <<< NOSSA NOVA IMPORTAÇÃO
 
 # --- Configuração da Página ---
 st.set_page_config(
@@ -13,15 +14,9 @@ st.set_page_config(
 )
 
 # --- Função de Auto-Refresh ---
-# Esta é a "mágica" do Streamlit para simular tempo real.
-# Ele força o navegador a pedir uma atualização a cada 2 segundos.
-# NOTA: O "ttl" (Time To Live) do rerun deve ser IGUAL ou MAIOR
-# que o tempo de atualização do seu sensor_simulator.py (que é 2s).
-try:
-    st.experimental_rerun(ttl=2)
-except:
-    # A partir do Streamlit 1.18+, a função mudou:
-    st.rerun(ttl=2)
+# ESTA É A NOVA FORMA: Usamos um componente dedicado.
+# Ele rodará a cada 2000ms (2 segundos) e nunca vai parar (limit=None).
+st_autorefresh(interval=2000, limit=None, key="dashboard_refresh")
 
 
 # --- Título ---
