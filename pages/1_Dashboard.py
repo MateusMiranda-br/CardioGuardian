@@ -2,9 +2,10 @@
 
 import streamlit as st
 import pandas as pd
-import time
+import altair as alt 
 from core.db_mock import read_data
-from streamlit_autorefresh import st_autorefresh # <<< NOSSA NOVA IMPORTAÇÃO
+from core.anomaly_detector import detect_anomalies
+from streamlit_autorefresh import st_autorefresh
 
 # --- Configuração da Página ---
 st.set_page_config(
@@ -13,69 +14,101 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- Função de Auto-Refresh ---
-# ESTA É A NOVA FORMA: Usamos um componente dedicado.
-# Ele rodará a cada 2000ms (2 segundos) e nunca vai parar (limit=None).
+# --- Auto-Refresh ---
 st_autorefresh(interval=2000, limit=None, key="dashboard_refresh")
 
-
 # --- Título ---
-st.title("🩺 Dashboard de Monitoramento")
-st.caption("Os dados estão sendo lidos do `mock_db.json` em tempo real.")
+st.title("🩺 Dashboard de Monitoramento Inteligente")
+st.caption("Executando análise de IA (Isolation Forest) em tempo real.")
 
-# --- Carregar Dados ---
+# --- 1. Carregar Dados ---
 db_data = read_data()
 history = db_data.get("heart_rate_history", [])
 profile = db_data.get("user_profile", {})
 
-if not history:
-    st.warning("Nenhum dado de frequência cardíaca encontrado. O sensor está rodando?")
+if len(history) < 20: 
+    st.warning("Aguardando coleta de dados... (mínimo de 20 pontos para análise)")
     st.stop()
 
-# Converte o histórico para um DataFrame Pandas para fácil manipulação
+# --- 2. Processamento de IA ---
 df = pd.DataFrame(history)
-# Converte timestamp (segundos) para datetime legível
 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
 
+df_processed = detect_anomalies(df.copy())
 
-# --- Layout do Dashboard ---
-col1, col2 = st.columns(2)
+last_row = df_processed.iloc[-1]
+last_bpm = last_row['bpm']
+last_anomaly_status = last_row['anomaly']
+
+
+# --- 3. Layout do Dashboard ---
+col1, col2 = st.columns([1, 2]) 
 
 with col1:
     st.subheader(f"Paciente: {profile.get('name', 'N/A')}")
     st.write(f"**Idade:** {profile.get('age', 'N/A')}")
+    # <<< CÓDIGO ORIGINAL (ESPERA UMA LISTA)
     st.write(f"**Condições:** {', '.join(profile.get('conditions', []))}")
 
-    # Pega o último batimento registrado
-    last_bpm = df.iloc[-1]['bpm']
-    
     # --- Métrica Principal ---
-    # Usamos o delta para mostrar a mudança do penúltimo para o último
     delta = None
-    if len(df) > 1:
-        delta_val = last_bpm - df.iloc[-2]['bpm']
+    if len(df_processed) > 1:
+        delta_val = last_bpm - df_processed.iloc[-2]['bpm']
         delta = f"{delta_val:+} BPM"
         
     st.metric(label="Batimento Atual (BPM)", value=last_bpm, delta=delta)
     
-    # --- Lógica de Alerta Heurístico (Passo 1 da IA) ---
+    # --- ÁREA DE ALERTAS (DUPLA CAMADA) ---
+    st.subheader("Status do Paciente")
+    
     if last_bpm > 100:
-        st.error("ALERTA: Taquicardia detectada!", icon="🚨")
+        st.error("ALERTA (Nível 1): Taquicardia detectada!", icon="🚨")
     elif last_bpm < 60:
-        st.warning("ALERTA: Bradicardia detectada!", icon="⚠️")
+        st.warning("ALERTA (Nível 1): Bradicardia detectada!", icon="⚠️")
     else:
-        st.success("Ritmo cardíaco normal.", icon="✅")
+        st.success("Ritmo normal (Nível 1).", icon="✅")
+        
+    if last_anomaly_status == -1:
+        st.warning("ALERTA (Nível 2): Padrão de ritmo incomum detectado pela IA!", icon="🤖")
+    else:
+        st.success("Padrão de ritmo normal (Nível 2).", icon="✅")
 
 
 with col2:
-    st.subheader("Histórico Recente (Últimos 200 registros)")
-    
-    # --- Gráfico de Linha ---
-    # Queremos o timestamp no eixo X e o BPM no eixo Y
-    chart_data = df.set_index('timestamp')['bpm']
-    
-    st.line_chart(chart_data, height=350)
+    st.subheader("Histórico Recente com Detecção de Anomalias")
+
+    # --- GRÁFICO AVANÇADO (ALTAIR) ---
+    base = alt.Chart(df_processed).encode(
+        x=alt.X('timestamp:T', title='Horário')
+    ).properties(
+        title='Frequência Cardíaca (Anomalias em Vermelho)'
+    )
+
+    line = base.mark_line(color='blue').encode(
+        y=alt.Y('bpm:Q', title='BPM')
+    )
+
+    points = base.mark_circle(size=60, opacity=1).encode(
+        y=alt.Y('bpm:Q'),
+        # <<< SINTAXE CORRIGIDA
+        color=alt.condition(
+            alt.datum.anomaly == -1, 
+            alt.value('red'),      
+            alt.value('blue')      
+        ),
+        tooltip=[
+            alt.Tooltip('timestamp:T', title='Horário', format='%Y-%m-%d %H:%M:%S'), 
+            alt.Tooltip('bpm', title='BPM'),
+            alt.Tooltip('anomaly', title='Status (IA)')
+        ]
+    )
+
+    chart = (line + points).interactive()
+
+    st.altair_chart(chart, use_container_width=True, theme="streamlit")
+
 
 st.divider()
-st.subheader("Logs de Dados Brutos (Últimos 10)")
-st.dataframe(df.tail(10).sort_values(by="timestamp", ascending=False))
+st.subheader("Logs de Dados Brutos (IA Incluída)")
+df_display = df_processed.rename(columns={'anomaly': 'Status IA (-1 = Anomalia)'})
+st.dataframe(df_display.tail(10).sort_values(by="timestamp", ascending=False))

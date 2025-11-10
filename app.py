@@ -11,7 +11,6 @@ st.set_page_config(
 )
 
 # Inicializa o banco de dados mocado se ele não existir
-# Isso também cria o mock_db.json na primeira execução
 initialize_db()
 
 # --- Conteúdo da Página ---
@@ -39,7 +38,7 @@ st.markdown("""
     ```
 4.  No **Terminal 2**, inicie o dashboard:
     ```bash
-    streamlit run app.py
+    python3 -m streamlit run app.py
     ```
 5.  No menu lateral do seu navegador, clique em **"1_Dashboard"** para ver os dados em tempo real.
 """)
