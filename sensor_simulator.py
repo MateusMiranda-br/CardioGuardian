@@ -6,7 +6,7 @@ from core.db_mock import add_heart_rate_data, initialize_db
 
 def generate_bpm():
     """
-    Gera um valor de BPM simulado.
+    Gera um valor de BPM simulado com ocasionais anomalias.
     """
     prob = random.random()
     
@@ -19,7 +19,7 @@ def generate_bpm():
 
 def run_sensor():
     """
-    Loop principal do sensor. (Versão SIMPLES)
+    Loop principal do sensor.
     """
     print("--- Sensor CardioGuardian Ativado ---")
     print("Gerando dados de BPM a cada 2 segundos. Pressione CTRL+C para parar.")

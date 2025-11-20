@@ -4,12 +4,12 @@ import json
 import os
 import random
 import time
-from threading import RLock # <<< CORRIGIDO para RLock
+from threading import RLock
 
 # Nome do nosso arquivo de "banco de dados"
 DB_FILE = "mock_db.json"
 
-# Usamos RLock para permitir que a mesma thread adquira o lock
+# Usamos RLock para permitir que a mesma thread adquira o lock sem travar
 file_lock = RLock()
 
 def initialize_db(max_entries=200):
@@ -21,6 +21,8 @@ def initialize_db(max_entries=200):
             print("Inicializando banco de dados mock...")
             initial_data = []
             current_time = int(time.time())
+            
+            # Gera alguns dados iniciais para não começar vazio
             for i in range(10):
                 initial_data.append({
                     "timestamp": current_time - (10 - i),
@@ -31,7 +33,8 @@ def initialize_db(max_entries=200):
                 "user_profile": {
                     "name": "Usuário Teste",
                     "age": 65,
-                    "conditions": ["Hipertensão"] # <<< ESTADO ORIGINAL (LISTA)
+                    # Agora usamos String em vez de Lista para facilitar a edição
+                    "conditions": "Hipertensão, Risco de Arritmia"
                 },
                 "heart_rate_history": initial_data,
                 "max_entries": max_entries
@@ -74,7 +77,7 @@ def add_heart_rate_data(new_bpm):
             
         data["heart_rate_history"] = history
         
-        # --- ESCRITA ATÔMICA (CORRIGIDA) ---
+        # --- ESCRITA ATÔMICA ---
         temp_file = DB_FILE + ".tmp"
         try:
             with open(temp_file, 'w') as f:
@@ -82,5 +85,28 @@ def add_heart_rate_data(new_bpm):
             os.replace(temp_file, DB_FILE)
         except Exception as e:
             print(f"ERRO: Falha na escrita atômica do DB: {e}")
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+
+def update_user_profile(new_profile: dict):
+    """
+    Atualiza o "user_profile" no banco de dados com novos dados.
+    """
+    with file_lock:
+        data = read_data()
+        
+        if "user_profile" in data:
+            data["user_profile"].update(new_profile)
+        else:
+            data["user_profile"] = new_profile
+        
+        # --- ESCRITA ATÔMICA ---
+        temp_file = DB_FILE + ".tmp"
+        try:
+            with open(temp_file, 'w') as f:
+                json.dump(data, f, indent=4)
+            os.replace(temp_file, DB_FILE)
+        except Exception as e:
+            print(f"ERRO: Falha na escrita atômica (update_user_profile): {e}")
             if os.path.exists(temp_file):
                 os.remove(temp_file)

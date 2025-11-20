@@ -14,12 +14,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- Auto-Refresh ---
+# --- Auto-Refresh (A cada 2 segundos) ---
 st_autorefresh(interval=2000, limit=None, key="dashboard_refresh")
 
 # --- Título ---
 st.title("🩺 Dashboard de Monitoramento Inteligente")
-st.caption("Executando análise de IA (Isolation Forest) em tempo real.")
+st.caption("Executando análise de IA (Isolation Forest Multivariado) em tempo real.")
 
 # --- 1. Carregar Dados ---
 db_data = read_data()
@@ -34,6 +34,7 @@ if len(history) < 20:
 df = pd.DataFrame(history)
 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
 
+# Detecta anomalias (agora usando features avançadas)
 df_processed = detect_anomalies(df.copy())
 
 last_row = df_processed.iloc[-1]
@@ -47,8 +48,8 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.subheader(f"Paciente: {profile.get('name', 'N/A')}")
     st.write(f"**Idade:** {profile.get('age', 'N/A')}")
-    # <<< CÓDIGO ORIGINAL (ESPERA UMA LISTA)
-    st.write(f"**Condições:** {', '.join(profile.get('conditions', []))}")
+    # Exibe as condições (agora suportando string direta)
+    st.write(f"**Condições:** {profile.get('conditions', 'N/A')}")
 
     # --- Métrica Principal ---
     delta = None
@@ -58,9 +59,10 @@ with col1:
         
     st.metric(label="Batimento Atual (BPM)", value=last_bpm, delta=delta)
     
-    # --- ÁREA DE ALERTAS (DUPLA CAMADA) ---
+    # --- ÁREA DE ALERTAS ---
     st.subheader("Status do Paciente")
     
+    # Nível 1: Heurística
     if last_bpm > 100:
         st.error("ALERTA (Nível 1): Taquicardia detectada!", icon="🚨")
     elif last_bpm < 60:
@@ -68,6 +70,7 @@ with col1:
     else:
         st.success("Ritmo normal (Nível 1).", icon="✅")
         
+    # Nível 2: IA Avançada
     if last_anomaly_status == -1:
         st.warning("ALERTA (Nível 2): Padrão de ritmo incomum detectado pela IA!", icon="🤖")
     else:
@@ -90,7 +93,7 @@ with col2:
 
     points = base.mark_circle(size=60, opacity=1).encode(
         y=alt.Y('bpm:Q'),
-        # <<< SINTAXE CORRIGIDA
+        # Cor condicional baseada na IA
         color=alt.condition(
             alt.datum.anomaly == -1, 
             alt.value('red'),      
