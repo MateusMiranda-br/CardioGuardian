@@ -6,6 +6,7 @@ import altair as alt
 from core.db_mock import read_data
 from core.anomaly_detector import detect_anomalies
 from core.notifier import send_telegram_alert
+from core.report_generator import generate_pdf  # <<< NOVA IMPORTAÇÃO
 from streamlit_autorefresh import st_autorefresh
 
 # --- Configuração da Página ---
@@ -18,7 +19,7 @@ st.set_page_config(
 # --- Auto-Refresh ---
 st_autorefresh(interval=2000, limit=None, key="dashboard_refresh")
 
-# --- Inicialização de Estado (Controle de Notificações) ---
+# --- Inicialização de Estado ---
 if "last_alert_timestamp" not in st.session_state:
     st.session_state["last_alert_timestamp"] = None
 
@@ -35,15 +36,10 @@ if len(history) < 20:
     st.warning("Aguardando coleta de dados... (mínimo de 20 pontos para análise)")
     st.stop()
 
-# --- 2. Processamento de IA e Fuso Horário ---
+# --- 2. Processamento e Fuso Horário ---
 df = pd.DataFrame(history)
-
-# --- CORREÇÃO DE FUSO HORÁRIO (AQUI ESTÁ O AJUSTE) ---
-# 1. Converte de segundos para datetime, informando que a origem é UTC
 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s', utc=True)
-# 2. Converte do UTC para o horário de São Paulo/Brasília
 df['timestamp'] = df['timestamp'].dt.tz_convert('America/Sao_Paulo')
-# 3. Remove a informação técnica de fuso (+03:00) para limpar o gráfico, mantendo a hora correta
 df['timestamp'] = df['timestamp'].dt.tz_localize(None)
 
 # Detecta anomalias
@@ -54,29 +50,20 @@ last_bpm = last_row['bpm']
 last_timestamp = last_row['timestamp']
 last_anomaly_status = last_row['anomaly']
 
-
-# --- LÓGICA DE NOTIFICAÇÃO TELEGRAM ---
+# --- NOTIFICAÇÃO TELEGRAM ---
 if last_anomaly_status == -1:
-    # Verifica se é um novo alerta comparando timestamps
     if st.session_state["last_alert_timestamp"] != last_timestamp:
-        
         msg = (
             f"🚨 **ALERTA CARDIOGUARDIAN** 🚨\n\n"
             f"**Paciente:** {profile.get('name', 'N/A')}\n"
             f"**BPM:** {last_bpm}\n"
             f"**Status:** Anomalia de Padrão Detectada!\n"
-            # O horário aqui já estará corrigido (-3h)
             f"**Horário:** {last_timestamp.strftime('%H:%M:%S')}"
         )
-        
         enviou = send_telegram_alert(msg)
-        
         if enviou:
             st.toast("Alerta enviado para o Telegram!", icon="📲")
             st.session_state["last_alert_timestamp"] = last_timestamp
-        else:
-            st.toast("Falha ao enviar alerta.", icon="❌")
-
 
 # --- 3. Layout do Dashboard ---
 col1, col2 = st.columns([1, 2]) 
@@ -85,6 +72,24 @@ with col1:
     st.subheader(f"Paciente: {profile.get('name', 'N/A')}")
     st.write(f"**Idade:** {profile.get('age', 'N/A')}")
     st.write(f"**Condições:** {profile.get('conditions', 'N/A')}")
+
+    # --- ÁREA DE RELATÓRIO (NOVA) ---
+    st.divider()
+    st.write("📊 **Exportar Dados**")
+    
+    # Geramos o PDF em memória
+    pdf_bytes = generate_pdf(df_processed, profile)
+    
+    # Botão de Download
+    st.download_button(
+        label="📄 Baixar Relatório do Dia (PDF)",
+        data=pdf_bytes,
+        file_name="relatorio_cardioguardian.pdf",
+        mime="application/pdf",
+        help="Gera um PDF com estatísticas e resumo das anomalias."
+    )
+    st.divider()
+    # -------------------------------
 
     # --- Métrica Principal ---
     delta = None
@@ -96,7 +101,6 @@ with col1:
     
     # --- ÁREA DE ALERTAS ---
     st.subheader("Status do Paciente")
-    
     if last_anomaly_status == -1:
         st.warning("ALERTA (Nível 2): Padrão de ritmo incomum detectado pela IA!", icon="🤖")
     elif last_bpm > 100:
@@ -110,7 +114,6 @@ with col1:
 with col2:
     st.subheader("Histórico Recente com Detecção de Anomalias")
 
-    # --- GRÁFICO AVANÇADO (ALTAIR) ---
     base = alt.Chart(df_processed).encode(
         x=alt.X('timestamp:T', title='Horário')
     ).properties(
@@ -136,14 +139,11 @@ with col2:
     )
 
     chart = (line + points).interactive()
-
     st.altair_chart(chart, use_container_width=True, theme="streamlit")
-
 
 st.divider()
 st.subheader("Logs de Dados Brutos (IA Incluída)")
 df_display = df_processed.rename(columns={'anomaly': 'Status IA (-1 = Anomalia)'})
-# Formata a coluna de data para exibir bonito na tabela também
 st.dataframe(
     df_display.tail(10).sort_values(by="timestamp", ascending=False).style.format({"timestamp": lambda t: t.strftime("%H:%M:%S")})
 )

@@ -3,3 +3,5 @@ pandas
 scikit-learn
 streamlit-autorefresh
 altair
+requests
+fpdf
